@@ -1,5 +1,9 @@
 import sys
 import time
+import requests  # Add this import
+from dotenv import load_dotenv  # Add this import
+import os  # Add this import
+import base64  # Add this import
 
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
@@ -12,17 +16,64 @@ from twitter_langchain import (
     TwitterToolkit,
 )
 
+from langchain_groq import ChatGroq  # Add this import
+
 # Configure a file to persist the agent's CDP MPC Wallet Data.
 wallet_data_file = "wallet_data.txt"
+
+# Load environment variables from .env file
+load_dotenv()
+
+def generate_bearer_token(api_key, api_secret_key):
+    """Generate a Bearer Token using Twitter API key and secret key."""
+    print(f"Using API Key: {api_key}")  # Debugging line
+    print(f"Using API Secret Key: {api_secret_key}")  # Debugging line
+    key_secret = f"{api_key}:{api_secret_key}".encode('ascii')
+    b64_encoded_key = base64.b64encode(key_secret).decode('ascii')
+    response = requests.post(
+        'https://api.twitter.com/oauth2/token',
+        headers={
+            'Authorization': f'Basic {b64_encoded_key}',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        },
+        data={'grant_type': 'client_credentials'}
+    )
+    if response.status_code == 200:
+        return response.json().get('access_token')
+    else:
+        raise Exception(f"Failed to generate bearer token: {response.status_code} {response.text}")
 
 
 def initialize_agent():
     """Initialize the agent with CDP Agentkit Twitter Langchain."""
     # Initialize LLM.
-    llm = ChatOpenAI(model="gpt-4o-mini")
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    llm = ChatGroq(api_key=groq_api_key, model="mixtral-8x7b-32768")
+
+    # Load Bearer Token
+    twitter_bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
+    twitter_access_token = os.getenv("TWITTER_ACCESS_TOKEN")
+    twitter_access_token_secret = os.getenv("TWITTER_ACCESS_SECRET")
+
+    if not twitter_bearer_token or not twitter_access_token or not twitter_access_token_secret:
+        raise Exception("Twitter Bearer Token, access token, or access token secret is missing. Please check your .env file.")
+
+    # Load OAuth 2.0 Client ID and Client Secret
+    oauth_client_id = os.getenv("OAUTH_CLIENT_ID")
+    oauth_client_secret = os.getenv("OAUTH_CLIENT_SECRET")
+
+    if not oauth_client_id or not oauth_client_secret:
+        raise Exception("OAuth Client ID or Client Secret is missing. Please check your .env file.")
 
     # Configure CDP Agentkit Twitter Langchain Extension.
-    values = {}
+    values = {
+        "twitter_bearer_token": twitter_bearer_token,
+        "twitter_access_token": twitter_access_token,
+        "twitter_access_token_secret": twitter_access_token_secret,
+        "oauth_client_id": oauth_client_id,
+        "oauth_client_secret": oauth_client_secret,
+        # ...other values...
+    }
 
     # Initialize CDP Agentkit Twitter Langchain
     wrapper = TwitterApiWrapper(**values)
